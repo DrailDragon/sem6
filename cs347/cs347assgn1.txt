@@ -1,0 +1,1452 @@
+/*
+*rename the same file as .cpp extension and compile and run and provide input as infix expression
+*
+*
+*/#include<cstdio>
+#include<cstdlib>
+#include<cstring>
+#include<iostream>
+#include<time.h>
+#include<stdio.h>
+#include<string.h>
+#include<stdlib.h>
+#include<stdbool.h>
+/*****************data structures********************/
+#define MAX_FST 10
+struct dfa
+{
+    int dftb[100][2]; //dfa table
+    int stst;//start state
+    int nfst; //number of final states
+    int finalst[MAX_FST]; //final states
+    int numstates;// number of total states
+    int numinputs;//number of inputs (initially we are taking 3 as 0=>'a',1=>'b')
+};
+//typedef struct dfa dfa;
+struct nfa
+{
+    int* a;//set of next states
+    int numnextstates;//number of next states in transition
+};
+
+typedef struct nfa nfa;
+//struct nfa** nf=NULL;
+//metanfa metanf;
+struct metanfa
+{
+    struct nfa** nf;
+    int stst;//start state
+    int nfst; //number of final states
+    int* finalst; //final states
+    int numstates;// number of total states
+    int numinputs;//number of inputs (initially we are taking 3 as 0=>'0',1=>'1',2=>'epsilon')
+};
+
+typedef struct metanfa metanfa;
+struct epcls{
+int state;
+int* closure;
+int ns;//number of states in closure
+};
+typedef struct epcls epcls;
+/**********dfa optimization**************************/
+#define MAX_SETS 20
+struct partition{
+int set[MAX_SETS][MAX_SETS];
+int numel[MAX_SETS];
+int numsets;
+};
+typedef struct partition pt;
+
+/********************input validation and conversion*************************************/
+void push(char stk[],char c,int* top)
+{
+    if(*top>=100)
+    {
+        printf("Stack overflow\n");
+        return;
+    }
+	
+	(*top)=(*top)+1;
+    stk[*top]=c;
+}
+char rt='e';
+char pop(char stk[],int* top)
+{
+    if(*top<0)
+    {
+        printf("Stack underflow\n");
+        return rt;
+    }
+	int t=(*top);
+	(*top)=(*top)-1;
+    return stk[t];
+}
+bool valida(char* s,int i,int j)
+{
+    char token,stk[100];
+    int k=i,top=-1,l;
+    while(k<=j)
+    {
+        token=s[k];
+        switch(token)
+        {
+        case '(':
+            push(stk,'(',&top);
+            break;
+        case 'a':
+           /* l=k+1;
+            while(s[l]=='a' || s[l]=='b')
+            {
+                ++k;
+                ++l;
+                if(k>j)
+                    return true;
+            }*/
+            break;
+        case 'b':
+           /* l=k+1;
+            while(s[l]=='a' || s[l]=='b')
+            {
+                ++k;
+                ++l;
+                if(k>j)
+                    return true;
+            }*/
+            break;
+        case '*':
+            if(s[k-1]=='(' || (s[k-1]!='a' && s[k-1]!='b' && s[k-1]!=')'))
+                return false;
+            break;
+        case '+':
+            if(s[k-1]=='(' || (s[k-1]!='a' && s[k-1]!='b' && s[k-1]!=')'))
+                return false;
+            break;
+        case '|':
+            if(s[k-1]==')')
+                valida(s,i,k-1);
+            if(k+1>j) break;
+            if(s[k+1]=='(')
+                valida(s,k+1,j);
+            else if(s[k+1]!='a' && s[k+1]!='b')
+                return false;
+            break;
+        case '.':
+        if(s[k-1]==')')
+                valida(s,i,k-1);
+            if(k+1>j) break;
+            if(s[k+1]=='(')
+                valida(s,k+1,j);
+            else if(s[k+1]!='a' && s[k+1]!='b')
+                return false;
+            break;
+        case ')':
+            if(top<0) return false;
+            pop(stk,&top);
+            break;
+        default:
+            printf("Invalid character\n");
+
+            return false;
+        }
+        ++k;
+    }
+    if(top>0) return false;
+    return true;
+}
+
+
+void push_s(char* stk[],char* s,int* top,int* beltop)
+{
+    if(*top>=100)
+    {
+        printf("Stack overflow\n");
+        return;
+    }
+    ++(*beltop);
+    ++(*top);
+   stk[*top]=s;
+
+}
+char* pop_s(char* stk[],int* top,int* beltop)
+{
+    if(*top<0)
+    {
+        printf("Stack underflow\n");
+        return NULL;
+    }
+    (*beltop)=(*beltop)-1;
+    int t=(*top);
+    (*top)=(*top)-1;
+    return stk[t];
+}
+char* inpost(char inf[],char post[])
+{
+    char* st[100],opst[100],token,temp[100][30],c,*t,l[]="(",a[]="a",b[]="b";
+
+    int k=0,top=-1,topop=-1,beltop=-2,ln=strlen(inf)-1,i=0;
+    while(k<=ln)
+    {
+        token=inf[k];
+        switch(token)
+        {
+        case '(':
+            push_s(st,l,&top,&beltop);
+            break;
+        case 'a':
+            push_s(st,a,&top,&beltop);
+            break;
+        case 'b':
+            push_s(st,b,&top,&beltop);
+            break;
+        case '*':
+            if(strcmp(st[top],"(")==0) break;
+            strcpy(temp[i],pop_s(st,&top,&beltop));
+            strcat(temp[i],"*");
+            
+            push_s(st,temp[i],&top,&beltop);
+            ++i;
+            break;
+        case '|':
+            if(top<0) return NULL;
+            if(strcmp(st[top],"(")==0) break;
+            if(top==0 || strcmp(st[beltop],"(")==0)
+            {
+                push(opst,'|',&topop);
+                break;
+            }
+            strcpy(temp[i],st[beltop]);
+            strcat(temp[i],pop_s(st,&top,&beltop));
+            strcat(temp[i],"|");
+            pop_s(st,&top,&beltop);
+            
+            push_s(st,temp[i],&top,&beltop);
+            ++i;
+            break;
+        case '+':
+             if(top==-1) break;
+            if(strcmp(st[top],"(")==0) break;
+            strcpy(temp[i],pop_s(st,&top,&beltop));
+            strcat(temp[i],"+");
+           
+            push_s(st,temp[i],&top,&beltop);
+            ++i;
+           
+            break;
+        case '.':
+            if(top<0) return NULL;
+            if(strcmp(st[top],"(")==0) break;
+            if(top==0 || strcmp(st[beltop],"(")==0)
+            {
+                push(opst,'.',&topop);
+                break;
+            }
+            strcpy(temp[i],st[beltop]);
+            strcat(temp[i],pop_s(st,&top,&beltop));
+            strcat(temp[i],".");
+           
+            pop_s(st,&top,&beltop);
+            push_s(st,temp[i],&top,&beltop);
+            ++i;
+            break;
+        case ')':
+            if(topop<0)
+            {
+                if(top<0) break;
+                strcpy(temp[i],pop_s(st,&top,&beltop));
+               
+                pop_s(st,&top,&beltop);
+                push_s(st,temp[i],&top,&beltop);
+                ++i;
+            }
+            else
+            {
+		if(strcmp(st[beltop],"(")==0){
+		 strcpy(temp[i],pop_s(st,&top,&beltop));
+			pop_s(st,&top,&beltop);
+			push_s(st,temp[i],&top,&beltop);
+			++i;
+			break;
+		}
+                //operator(. or |) is there
+
+                while(topop>=0)
+                {
+                    c=pop(opst,&topop);
+                    strcpy(temp[i],st[beltop]);
+                    
+                    t=pop_s(st,&top,&beltop);
+                    strcat(temp[i],t);
+                    
+                    if(c=='|')
+                    strcat(temp[i],"|");
+                    else if(c=='.')
+                    strcat(temp[i],".");
+                   
+                    pop_s(st,&top,&beltop);
+                    pop_s(st,&top,&beltop);
+                    push_s(st,temp[i],&top,&beltop);
+                    ++i;
+                }
+
+                }
+                break;
+            default:
+                printf("Invalid character in inpost\n");
+                return NULL;
+
+
+        }
+        ++k;
+    }
+     if(top>=0){
+	while(topop>=0){
+		c=pop(opst,&topop);
+                    strcpy(temp[i],st[beltop]);
+                    
+                    t=pop_s(st,&top,&beltop);
+                    strcat(temp[i],t);
+                    
+                    if(c=='|')
+                    strcat(temp[i],"|");
+                    else if(c=='.')
+                    strcat(temp[i],".");
+                   
+                    pop_s(st,&top,&beltop);
+                 // pop_s(st,&top,&beltop);
+                    push_s(st,temp[i],&top,&beltop);
+                    ++i;
+	}
+	if(topop<0){
+strcpy(post,pop_s(st,&top,&beltop));
+        return post;}
+        }
+	return NULL;
+        }
+/**************************************nfa **************************************/
+//Create an nfa for a single letter with two states
+bool initialize(metanfa** metanf,int input)
+{
+    (*metanf)=(metanfa*)malloc(sizeof(metanfa));
+    if((*metanf)==NULL)
+    {
+        printf("Error malloc metanf init\n");
+        return false;
+    }
+    (*metanf)->nf=(struct nfa**)malloc((*metanf)->numstates*sizeof(nfa*));
+    if((*metanf)->nf==NULL)
+    {
+        printf("Error malloc (*metanf)->nf\n");
+        return false;
+    }
+    (*metanf)->stst=0;
+    (*metanf)->nfst=1;
+    (*metanf)->finalst=(int*)malloc(5*sizeof(int));
+    if((*metanf)->finalst==NULL)
+    {
+        printf("Error malloc (*metanf)->finalst\n");
+        return false;
+    }
+    (*metanf)->finalst[0]=1;
+    (*metanf)->numstates=2;
+    (*metanf)->numinputs=3;
+
+    int i,j,k;
+    for(i=0; i<(*metanf)->numstates; i++)
+    {
+        (*metanf)->nf[i]=(struct nfa*)malloc((*metanf)->numinputs*sizeof(nfa));
+        if((*metanf)->nf[i]==NULL)
+        {
+            printf("Error malloc (*metanf)->nf[%d]\n",i);
+            return false;
+        }
+    }
+
+    //initialize the numnextstates by zero
+    for(i=0; i<(*metanf)->numstates; i++)
+    {
+        for(j=0; j<(*metanf)->numinputs; j++)
+        {
+            (*metanf)->nf[i][j].a=NULL;
+            (*metanf)->nf[i][j].numnextstates=0;
+        }
+    }
+    //on input introduce transition
+    (*metanf)->nf[0][input].a=(int*)malloc(5*sizeof(int));
+    (*metanf)->nf[0][input].a[0]=1;
+    (*metanf)->nf[0][input].numnextstates=1;
+    //printf("Malloc successful\n");
+    return true;
+}
+bool unionor(metanfa** n1,metanfa** n2,metanfa** n3)
+{
+   
+    int i,j,k;
+    if(!(*n1) || !(*n2)) return true;
+    if(((*n1)->numinputs) != ((*n2)->numinputs))
+    {
+        printf("Not compatible nfas\n");
+        return false;
+    }
+  /*  if((*n3))
+    {
+        (*n3)=NULL;
+    }*/
+    /*****malloc etc*********/
+    (*n3)=(metanfa*)malloc(sizeof(metanfa));
+    if(!(*n3))
+    {
+        printf("Error malloc in commonbinopr\n");
+        return false;
+    }
+    (*n3)->finalst=(int*)malloc(5*sizeof(int));
+    if(!(*n3)->finalst)
+    {
+        printf("Error malloc (*n3)->finalst in commonbinopr\n");
+        return false;
+    }
+
+    (*n3)->numinputs=(*n1)->numinputs;
+    /******Introduce two extra states******/
+    (*n3)->numstates=(*n1)->numstates+(*n2)->numstates+2;
+    (*n3)->nf=(nfa**)malloc((*n3)->numstates*sizeof(nfa*));
+    if(!(*n3)->nf)
+    {
+        printf("Error malloc nf in commonbinopr\n");
+        return false;
+    }
+
+    for(i=0; i<(*n3)->numstates; i++)
+    {
+        (*n3)->nf[i]=(nfa*)malloc((*n3)->numinputs*sizeof(nfa));
+        if(!(*n3)->nf[i])
+        {
+            printf("Error malloc nf[%d] in commonbinopr\n",i);
+            return false;
+        }
+    }
+
+    /*********Update states of (*n2)**************/
+    //add in each state (*n1)->numstates
+    (*n2)->stst+=(*n1)->numstates;
+    for(i=0; i<(*n2)->nfst; i++)
+    {
+        (*n2)->finalst[i]+=(*n1)->numstates;
+    }
+    for(i=0; i<(*n2)->numstates; i++)
+    {
+        for(j=0; j<(*n2)->numinputs; j++)
+        {
+            for(k=0; k<(*n2)->nf[i][j].numnextstates; k++)
+            {
+                (*n2)->nf[i][j].a[k]+=(*n1)->numstates;
+            }
+        }
+    }
+    /********Copy the transitions of (*n1) first and then (*n2) into (*n3)****************/
+    for(i=0; i<(*n1)->numstates; i++)
+    {
+        for(j=0; j<(*n1)->numinputs; j++)
+        {
+            if((*n1)->nf[i][j].numnextstates==0) { (*n3)->nf[i][j].numnextstates=0; continue;}
+            (*n3)->nf[i][j].a=(int*)malloc((*n1)->nf[i][j].numnextstates*sizeof(int));
+            if((*n3)->nf[i][j].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[%d][%d].a in unionor\n",i,j);
+                return false;
+            }
+            (*n3)->nf[i][j].numnextstates=(*n1)->nf[i][j].numnextstates;
+            //copy transitions
+            for(k=0; k<(*n3)->nf[i][j].numnextstates; k++)
+            {
+                (*n3)->nf[i][j].a[k]=(*n1)->nf[i][j].a[k];
+            }
+        }
+    }
+
+    for(i=(*n1)->numstates; i<(*n3)->numstates-2; i++)
+    {
+        for(j=0; j<(*n1)->numinputs; j++)
+        {
+            if((*n2)->nf[i-(*n1)->numstates][j].numnextstates==0){ (*n3)->nf[i][j].numnextstates=0; continue;}
+            (*n3)->nf[i][j].a=(int*)malloc((((*n2)->nf[i-(*n1)->numstates][j].numnextstates>5)?(*n2)->nf[i-(*n1)->numstates][j].numnextstates:5)*sizeof(int));
+            if((*n3)->nf[i][j].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[%d][%d].a in unionor\n",i,j);
+                return false;
+            }
+            (*n3)->nf[i][j].numnextstates=(*n2)->nf[i-(*n1)->numstates][j].numnextstates;
+            //copy transitions
+            for(k=0; k<(*n3)->nf[i][j].numnextstates; k++)
+            {
+                (*n3)->nf[i][j].a[k]=(*n2)->nf[i-(*n1)->numstates][j].a[k];
+            }
+        }
+    }
+    /******update start state and final states of (*n3)********/
+    (*n3)->stst=(*n3)->numstates-2;
+    (*n3)->finalst=(int*)malloc(5*sizeof(int));
+    if((*n3)->finalst==NULL)
+    {
+        printf("Error malloc (*n3)->finalst in unionor\n");
+        return false;
+    }
+    (*n3)->nfst=1;
+    (*n3)->finalst[0]=(*n3)->numstates-1;
+    /******Introduce four epsilon transitions***********/
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+    if((*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a==NULL)
+    {
+        printf("Error malloc (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a in unionor\n");
+        return false;
+    }
+    //(*n3)'s start to the two's((*n1)'s and (*n2)'s) starts
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a[0]=(*n1)->stst;
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a[1]=(*n2)->stst;
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].numnextstates=2;
+    //from each of the twos' finals to (*n3)'s final
+    for(i=0; i<(*n1)->nfst; i++)
+    {
+        if((*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a!=NULL)
+        {
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a[(*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates]=(*n3)->finalst[0];
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates=(*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates+1;
+        }
+        else
+        {
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+            if((*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a in unionor\n");
+                return false;
+            }
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a[0]=(*n3)->finalst[0];
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates=1;
+        }
+    }
+    for(i=0; i<(*n2)->nfst; i++)
+    {
+        if((*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a!=NULL)
+        {
+
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a[(*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates]=(*n3)->finalst[0];
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates=(*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates+1;
+        }
+        else
+        {
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+            if((*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a in unionor\n");
+                return false;
+            }
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a[0]=(*n3)->finalst[0];
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates=1;
+
+        }
+    }
+    return true;
+}
+//concatenate two nfas
+bool concat(metanfa** n1,metanfa** n2,metanfa** n3)
+{
+    if(!(*n1) || !(*n2)) return true;
+    if(((*n1)->numinputs) != ((*n2)->numinputs))
+    {
+        printf("Not compatible nfas\n");
+        return false;
+    }
+    int i,j,k;
+   /* if((*n3))
+    {
+        (*n3)=NULL;
+    }*/
+    /*****malloc etc*********/
+    (*n3)=(metanfa*)malloc(sizeof(metanfa));
+    if(!(*n3))
+    {
+        printf("Error malloc in commonbinopr\n");
+        return false;
+    }
+    (*n3)->finalst=(int*)malloc(5*sizeof(int));
+    if(!(*n3)->finalst)
+    {
+        printf("Error malloc (*n3)->finalst in commonbinopr\n");
+        return false;
+    }
+
+    (*n3)->numinputs=(*n1)->numinputs;
+    /******Introduce two extra states******/
+    (*n3)->numstates=(*n1)->numstates+(*n2)->numstates+2;
+    (*n3)->nf=(nfa**)malloc((*n3)->numstates*sizeof(nfa*));
+    if(!(*n3)->nf)
+    {
+        printf("Error malloc nf in commonbinopr\n");
+        return false;
+    }
+
+    for(i=0; i<(*n3)->numstates; i++)
+    {
+        (*n3)->nf[i]=(nfa*)malloc((*n3)->numinputs*sizeof(nfa));
+        if(!(*n3)->nf[i])
+        {
+            printf("Error malloc nf[%d] in commonbinopr\n",i);
+            return false;
+        }
+    }
+
+    /*********Update states of (*n2)**************/
+    //add in each state (*n1)->numstates
+    (*n2)->stst+=(*n1)->numstates;
+    for(i=0; i<(*n2)->nfst; i++)
+    {
+        (*n2)->finalst[i]+=(*n1)->numstates;
+    }
+    for(i=0; i<(*n2)->numstates; i++)
+    {
+        for(j=0; j<(*n2)->numinputs; j++)
+        {
+            for(k=0; k<(*n2)->nf[i][j].numnextstates; k++)
+            {
+                (*n2)->nf[i][j].a[k]+=(*n1)->numstates;
+            }
+        }
+    }
+    /********Copy the transitions of (*n1) first and then (*n2) into (*n3)****************/
+    for(i=0; i<(*n1)->numstates; i++)
+    {
+        for(j=0; j<(*n1)->numinputs; j++)
+        {
+            if((*n1)->nf[i][j].numnextstates==0) { (*n3)->nf[i][j].numnextstates=0; continue;}
+            (*n3)->nf[i][j].a=(int*)malloc((*n1)->nf[i][j].numnextstates*sizeof(int));
+            if((*n3)->nf[i][j].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[%d][%d].a in unionor\n",i,j);
+                return false;
+            }
+            (*n3)->nf[i][j].numnextstates=(*n1)->nf[i][j].numnextstates;
+            //copy transitions
+            for(k=0; k<(*n3)->nf[i][j].numnextstates; k++)
+            {
+                (*n3)->nf[i][j].a[k]=(*n1)->nf[i][j].a[k];
+            }
+        }
+    }
+
+    for(i=(*n1)->numstates; i<(*n3)->numstates-2; i++)
+    {
+        for(j=0; j<(*n1)->numinputs; j++)
+        {
+            if((*n2)->nf[i-(*n1)->numstates][j].numnextstates==0) { (*n3)->nf[i][j].numnextstates=0; continue;}
+            (*n3)->nf[i][j].a=(int*)malloc((((*n2)->nf[i-(*n1)->numstates][j].numnextstates>5)?(*n2)->nf[i-(*n1)->numstates][j].numnextstates:5)*sizeof(int));
+            if((*n3)->nf[i][j].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[%d][%d].a in unionor\n",i,j);
+                return false;
+            }
+            (*n3)->nf[i][j].numnextstates=(*n2)->nf[i-(*n1)->numstates][j].numnextstates;
+            //copy transitions
+            for(k=0; k<(*n3)->nf[i][j].numnextstates; k++)
+            {
+                (*n3)->nf[i][j].a[k]=(*n2)->nf[i-(*n1)->numstates][j].a[k];
+            }
+        }
+    }
+    /******update start state and final states of (*n3)********/
+    (*n3)->stst=(*n3)->numstates-2;
+    (*n3)->finalst=(int*)malloc(5*sizeof(int));
+    if((*n3)->finalst==NULL)
+    {
+        printf("Error malloc (*n3)->finalst in unionor\n");
+        return false;
+    }
+    (*n3)->nfst=1;
+    (*n3)->finalst[0]=(*n3)->numstates-1;
+    //Introduce transitions from final states of n1 to the start state of n2
+    //from (*n1)'s finals to (*n2)'s start
+    for(i=0; i<(*n1)->nfst; i++)
+    {
+        if((*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a!=NULL)
+        {
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a[(*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates]=(*n2)->stst;
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates=(*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates+1;
+        }
+        else
+        {
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+            if((*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[(*n1)->finalst[%d]][(*n3)->numinputs-1].a in concat\n",i);
+                return false;
+            }
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].a[0]=(*n2)->stst;
+            (*n3)->nf[(*n1)->finalst[i]][(*n3)->numinputs-1].numnextstates=1;
+        }
+    }
+    //Introduce epsilon-transition from start of (*n3) to that of (*n1)
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+    if((*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a==NULL)
+    {
+        printf("Error malloc (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a in concat\n");
+        return false;
+    }
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].a[0]=(*n1)->stst;
+    (*n3)->nf[(*n3)->stst][(*n3)->numinputs-1].numnextstates=1;
+    //Introduce  epsilon-transitions from finals of (*n2) to final of (*n3)
+    for(i=0; i<(*n2)->nfst; i++)
+    {
+        if((*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a!=NULL)
+        {
+            //On error see if more space needed to be allocated to a
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a[(*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates]=(*n3)->finalst[0];
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates=(*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates+1;
+        }
+        else
+        {
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+            if((*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n3)->nf[(*n2)->finalst[%d]][(*n3)->numinputs-1].a in concat\n",i);
+                return false;
+            }
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].a[0]=(*n3)->finalst[0];
+            (*n3)->nf[(*n2)->finalst[i]][(*n3)->numinputs-1].numnextstates=1;
+
+        }
+    }
+    return true;
+}
+
+//(*n1)'s positive_kleene-closure stored in (*n2)
+bool positive_kleene_closure(metanfa** n1,metanfa** n2)
+{
+      if(!(n1))
+    {
+        printf("(n1) null\n");
+        return false;
+    }
+     if(!(*n1))
+    {
+        printf("(*n1) null\n");
+        return false;
+    }
+    //if((*n2)) (*n2)=NULL;
+    if(!n2){printf("n2 null\n"); return false;}
+    int i,j,k;
+    /*****malloc etc*********/
+    (*n2)=(metanfa*)malloc(sizeof(metanfa));
+    if(!(*n2))
+    {
+        printf("Error malloc in positive_kleene-closure\n");
+        return false;
+    }
+    (*n2)->finalst=(int*)malloc(5*sizeof(int));
+    if(!(*n2)->finalst)
+    {
+        printf("Error malloc (*n2)->finalst in positive_kleene-closure\n");
+        return false;
+    }
+
+    (*n2)->numinputs=(*n1)->numinputs;
+    /******Introduce two extra states******/
+    (*n2)->numstates=(*n1)->numstates+2;
+    (*n2)->nf=(nfa**)malloc((*n2)->numstates*sizeof(nfa*));
+    if(!(*n2)->nf)
+    {
+        printf("Error malloc (*n2)->nf in positive_kleene-closure\n");
+        return false;
+    }
+
+    for(i=0; i<(*n2)->numstates; i++)
+    {
+        (*n2)->nf[i]=(nfa*)malloc((*n2)->numinputs*sizeof(nfa));
+        if(!(*n2)->nf[i])
+        {
+            printf("Error malloc (*n2)->nf[%d] in positive_kleene-closure\n",i);
+            return false;
+        }
+    }
+    /********Copy the transitions of (*n1) first into (*n2)****************/
+    for(i=0; i<(*n1)->numstates; i++)
+    {
+        for(j=0; j<(*n1)->numinputs; j++)
+        {
+            if((*n1)->nf[i][j].numnextstates==0) {(*n2)->nf[i][j].numnextstates=0; continue;}
+            (*n2)->nf[i][j].a=(int*)malloc((*n1)->nf[i][j].numnextstates*sizeof(int));
+            if((*n2)->nf[i][j].a==NULL)
+            {
+                printf("Error malloc (*n2)->nf[%d][%d].a in positive_kleene-closure\n",i,j);
+                return false;
+            }
+            (*n2)->nf[i][j].numnextstates=(*n1)->nf[i][j].numnextstates;
+            //copy transitions
+            for(k=0; k<(*n2)->nf[i][j].numnextstates; k++)
+            {
+                (*n2)->nf[i][j].a[k]=(*n1)->nf[i][j].a[k];
+            }
+        }
+    }
+    /******update start state and final states of (*n2)********/
+    (*n2)->stst=(*n2)->numstates-2;
+    (*n2)->finalst=(int*)malloc(5*sizeof(int));
+    if((*n2)->finalst==NULL)
+    {
+        printf("Error malloc (*n2)->finalst in unionor\n");
+        return false;
+    }
+    (*n2)->nfst=1;
+    (*n2)->finalst[0]=(*n2)->numstates-1;
+   
+    //Introduce epsilon-transition from start state of (*n2) to start state of (*n1)
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+    if((*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a==NULL)
+    {
+        printf("Error malloc (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a in positive_kleene_closure\n");
+        return false;
+    }
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a[0]=(*n1)->stst;
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].numnextstates=1;
+    //Introduce epsilon-transition from final states of (*n1) to start state of (*n2)
+    // printf("%d\n", (*n1)->nfst);
+    for(i=0; i<(*n1)->nfst; i++)
+    {
+        if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a!=NULL)
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[(*n1)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates]=(*n2)->stst;
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates+=1;
+            //printf("if%d\n",(*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]);
+        }
+        else
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+            if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n2)->nf[(*n1)->finalst[%d]].a in positive_kleene_closure\n",i );
+                return false;
+            }
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]=(*n2)->stst;
+            // printf("%delse%d\n",(*n1)->finalst[i],(*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]);
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates=1;
+        }
+    }
+    //Introduce epsilon-transition from final states of (*n1) to final state of (*n2)
+    for(i=0; i<(*n1)->nfst; i++)
+    {
+        if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a!=NULL)
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[(*n1)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates]=(*n2)->finalst[0];
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates+=1;
+        }
+        else
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a=(int*)malloc(sizeof(int));
+            if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n2)->nf[(*n1)->finalst[%d]].a in positive_kleene_closure\n",i );
+                return false;
+            }
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]=(*n2)->finalst[0];
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates=1;
+        }
+    }
+    return true;
+}
+//(*n1)'s kleene-closure stored in (*n2)
+bool kleene_closure(metanfa** n1,metanfa** n2)
+{
+     if(!(*n1))
+    {
+        printf("(*n1) null\n");
+        return false;
+    }
+    if((*n2)) (*n2)=NULL;
+    int i,j,k;
+    /*****malloc etc*********/
+    (*n2)=(metanfa*)malloc(sizeof(metanfa));
+    if(!(*n2))
+    {
+        printf("Error malloc in positive_kleene-closure\n");
+        return false;
+    }
+    (*n2)->finalst=(int*)malloc(5*sizeof(int));
+    if(!(*n2)->finalst)
+    {
+        printf("Error malloc (*n2)->finalst in positive_kleene-closure\n");
+        return false;
+    }
+
+    (*n2)->numinputs=(*n1)->numinputs;
+    /******Introduce two extra states******/
+    (*n2)->numstates=(*n1)->numstates+2;
+    (*n2)->nf=(nfa**)malloc((*n2)->numstates*sizeof(nfa*));
+    if(!(*n2)->nf)
+    {
+        printf("Error malloc (*n2)->nf in positive_kleene-closure\n");
+        return false;
+    }
+
+    for(i=0; i<(*n2)->numstates; i++)
+    {
+        (*n2)->nf[i]=(nfa*)malloc((*n2)->numinputs*sizeof(nfa));
+        if(!(*n2)->nf[i])
+        {
+            printf("Error malloc (*n2)->nf[%d] in positive_kleene-closure\n",i);
+            return false;
+        }
+    }
+    /********Copy the transitions of (*n1) first into (*n2)****************/
+    for(i=0; i<(*n1)->numstates; i++)
+    {
+        for(j=0; j<(*n1)->numinputs; j++)
+        {
+            if((*n1)->nf[i][j].numnextstates==0) {(*n2)->nf[i][j].numnextstates=0; continue;}
+            (*n2)->nf[i][j].a=(int*)malloc((*n1)->nf[i][j].numnextstates*sizeof(int));
+            if((*n2)->nf[i][j].a==NULL)
+            {
+                printf("Error malloc (*n2)->nf[%d][%d].a in positive_kleene-closure\n",i,j);
+                return false;
+            }
+            (*n2)->nf[i][j].numnextstates=(*n1)->nf[i][j].numnextstates;
+            //copy transitions
+            for(k=0; k<(*n2)->nf[i][j].numnextstates; k++)
+            {
+                (*n2)->nf[i][j].a[k]=(*n1)->nf[i][j].a[k];
+            }
+        }
+    }
+    /******update start state and final states of (*n2)********/
+    (*n2)->stst=(*n2)->numstates-2;
+    (*n2)->finalst=(int*)malloc(5*sizeof(int));
+    if((*n2)->finalst==NULL)
+    {
+        printf("Error malloc (*n2)->finalst in unionor\n");
+        return false;
+    }
+    (*n2)->nfst=1;
+    (*n2)->finalst[0]=(*n2)->numstates-1;
+   
+    //Introduce epsilon-transition from start state of (*n2) to start state of (*n1)
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+    if((*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a==NULL)
+    {
+        printf("Error malloc (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a in positive_kleene_closure\n");
+        return false;
+    }
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a[0]=(*n1)->stst;
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].numnextstates=1;
+    //Introduce epsilon-transition from final states of (*n1) to start state of (*n2)
+    // printf("%d\n", (*n1)->nfst);
+    for(i=0; i<(*n1)->nfst; i++)
+    {
+        if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a!=NULL)
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[(*n1)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates]=(*n2)->stst;
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates+=1;
+            //printf("if%d\n",(*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]);
+        }
+        else
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a=(int*)malloc(5*sizeof(int));
+            if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n2)->nf[(*n1)->finalst[%d]].a in positive_kleene_closure\n",i );
+                return false;
+            }
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]=(*n2)->stst;
+            // printf("%delse%d\n",(*n1)->finalst[i],(*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]);
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates=1;
+        }
+    }
+    //Introduce epsilon-transition from final states of (*n1) to final state of (*n2)
+    for(i=0; i<(*n1)->nfst; i++)
+    {
+        if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a!=NULL)
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[(*n1)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates]=(*n2)->finalst[0];
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates+=1;
+        }
+        else
+        {
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a=(int*)malloc(sizeof(int));
+            if((*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a==NULL)
+            {
+                printf("Error malloc (*n2)->nf[(*n1)->finalst[%d]].a in positive_kleene_closure\n",i );
+                return false;
+            }
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].a[0]=(*n2)->finalst[0];
+            (*n2)->nf[(*n1)->finalst[i]][(*n2)->numinputs-1].numnextstates=1;
+        }
+    }
+    //Introduce epsilon-transition from start state of (*n2) to final state of (*n2)
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].a[1]=(*n2)->finalst[0];
+    (*n2)->nf[(*n2)->stst][(*n2)->numinputs-1].numnextstates+=1;
+    return true;
+}
+bool print_nfa(metanfa **n);
+//parse postfix input to nfa
+bool parse_postfix(char* s,metanfa** n1,metanfa** n2,metanfa **n3,metanfa** n4){
+		char token=s[0];
+		int i=0,ln=strlen(s),top=-1;
+		metanfa stk[50];
+		metanfa* tf;
+		while(i<ln){
+			token=s[i];
+			printf("token=%c\n",token);
+			switch(token){
+			case 'a':
+			initialize(n1,0);
+			stk[++top]=**n1;
+			tf=&stk[top];			
+			break;
+			case 'b':
+			initialize(n2,1);
+			stk[++top]=**n2;
+			//n2=NULL;
+			tf=&stk[top];
+			//print_nfa(&tf);
+			break;
+			case '*':
+			if(top==-1) {printf("Invalid Expr in parse_postfix\n"); return false;}
+			**n1=stk[top];
+			--top;
+			kleene_closure(n1,n2);
+			stk[++top]=**n2;
+			tf=&stk[top];
+			//print_nfa(&tf);
+			//print_nfa(&stk[top]);
+			break;
+			case '+':
+			if(top==-1) {printf("Invalid Expr  in parse_postfix\n"); return false;}
+			**n1=stk[top];
+			--top;
+			positive_kleene_closure(n1,n2);
+			stk[++top]=**n2;
+			tf=&stk[top];
+			//print_nfa(&tf);
+			//print_nfa(&stk[top]);
+			break;
+			case '|':
+			if(top<1){printf("Invalid Expr  in parse_postfix\n"); return false;}
+			**n1=stk[top];
+			--top;
+			**n2=stk[top];
+			--top;
+			unionor(n1,n2,n3);
+			stk[++top]=**n3;
+			tf=&stk[top];
+			//print_nfa(&tf);
+			//print_nfa(&stk[top]);
+			break;
+			case '.':
+			if(top<1){printf("Invalid Expr  in parse_postfix\n"); return false;}
+			**n1=stk[top];
+			--top;
+			**n2=stk[top];
+			--top;
+			concat(n1,n2,n3);
+			//print_nfa(n3);
+			stk[++top]=**n3;
+			tf=&stk[top];
+			//print_nfa(&tf);
+			//print_nfa(&stk[top]);
+			break;
+			default:
+			printf("Invalid character in parse_postfix\n");
+			return false;
+			}
+		++i;
+		}
+	**n4=stk[top];
+	//tf=&stk[top];
+			//print_nfa(&tf);
+	--top;
+	return true;
+}
+//print nfa
+bool print_nfa(metanfa **n)
+{
+    if(n==NULL){
+	printf("n null print_nfa\n");return false;}
+    if(!(*n))
+    {
+        printf("(*n) null\n");
+        return false;
+    }
+    if((*n)->nf==NULL)
+    {
+        printf("(*n)->nf null\n");
+        return false;
+    }
+    int i,j,k;
+    char c;
+    printf("Nfa:\n");
+    printf("Start state: %d\n",(*n)->stst);
+    printf("final states:\n");
+    for(i=0; i<(*n)->nfst; i++)
+    {
+        printf("%d\t",(*n)->finalst[i]);
+    }
+    printf("\n");
+    for(i=0; i<(*n)->numstates; i++)
+    {
+        printf("Current State: %d\n",i);
+        for(j=0; j<(*n)->numinputs-1; j++)
+        {
+		c=((j==0)?('a'):('b'));
+            printf("\tInput: %c\tnext States:{",c);
+            for(k=0; k<(*n)->nf[i][j].numnextstates; k++)
+            {
+                printf("%d,",(*n)->nf[i][j].a[k]);
+            }
+            printf("}\n");
+        }
+	//j=(*n)->numinputs-1;
+        printf("Input: epsilon num%d\tnext States:{",(*n)->nf[i][j].numnextstates);
+        for(k=0; k<(*n)->nf[i][j].numnextstates; k++)
+        {
+            printf("%d,",(*n)->nf[i][j].a[k]);
+        }
+        printf("}\n");
+    }
+    return true;
+}
+bool delete_nfa(metanfa** n)
+{
+    if(!n) return true;
+    int i,j,k;
+    if(!(*n)){return true;}
+    if((*n)->nf)
+    {
+        for(i=0; i<(*n)->numstates; i++)
+        {
+            for(j=0; j<(*n)->numinputs; j++)
+            {
+                if((*n)->nf[i][j].a)
+                {
+                    free((*n)->nf[i][j].a);
+                    if((*n)->nf[i][j].a)
+                    {
+                        (*n)->nf[i][j].a=NULL;
+                    }
+                }
+            }
+        }
+        for (i=0; i<(*n)->numstates; i++)
+        {
+            free((*n)->nf[i]);
+            if((*n)->nf[i])
+            {
+                (*n)->nf[i]=NULL;
+            }
+        }
+        free((*n)->nf);
+        if((*n)->nf)
+        {
+            (*n)->nf=NULL;
+        }
+    }
+    if((*n)->finalst)
+    {
+        free((*n)->finalst);
+        if((*n)->finalst)
+        {
+            (*n)->finalst=NULL;
+        }
+    }
+    return true;
+}
+/*******************nfa-dfa*******************************************/
+bool epsclosure(metanfa** n,epcls** epc){
+	int i,j,k;
+	bool fl=false;
+	int x=(*epc)->state;
+		(*epc)->closure[((*epc)->ns)++]=x;
+		for(i=0;i<(*n)->nf[x][(*n)->numinputs-1].numnextstates;i++){
+			fl=false;
+			x=(*n)->nf[x][(*n)->numinputs-1].a[i];
+			for(k=0;k<(*epc)->ns;k++){
+				if(x==(*epc)->closure[k])
+					fl=true;
+				}
+			if(fl==true) continue;
+			(*epc)->state=(*n)->nf[x][(*n)->numinputs-1].a[i];
+			epsclosure(n,epc);
+			}
+	return true;
+}
+
+bool nfa_dfa(metanfa** nf,dfa** df,epcls** epc[]){//epc's pointer if needed
+	int dfsz=50,i,j,k;
+	int cursize=0;
+	(*df)=(dfa*)malloc(sizeof(dfa));
+	if(!(*df)){printf("Error malloc (*df) in nfa_dfa\n"); return false;}
+	(*df)->numstates=0;
+	(*df)->numinputs=2;
+	(*df)->nfst=0;
+	(*df)->stst=-1;
+	//initialize transitions of dfa df
+	for(i=0;i<dfsz;i++){
+		for(j=0;j<(*df)->numinputs;j++)
+			(*df)->dftb[i][j]=-1;
+	}
+	for(i=0;i<MAX_FST;i++)
+		(*df)->finalst[i]=-1; 
+	//currently declaring static may be we will need to pass it from main
+	(*epc)=(epcls**)malloc(100*sizeof(epcls*)); 
+	for(i=0;i<(*nf)->numstates;i++){
+		(*epc[i])=(epcls*)malloc(sizeof(epcls));
+		if(!(*epc[i])){printf("Error malloc epc in nfa_dfa\n"); return false;} 
+		(*epc[i])->closure=(int*)malloc((*nf)->numstates*sizeof(int));
+		if(!((*epc[i])->closure)){printf("Error malloc (*epc)->closure in nfa_dfa\n"); return false;}
+		(*epc[i])->ns=0;
+	}
+	//l is the number of states in the dfa
+	int l=0,m=0,i1,s1=0,l1; bool fls[2],extw=false;fls[0]=false;fls[1]=false;
+	(*epc[l++])->state=(*nf)->stst;
+	epsclosure(nf,epc[l-1]);
+	(*df)->numstates+=1;
+	while(true){
+	for(i=0;i<(*epc[l-1])->ns;i++){
+		for(j=0;j<(*df)->numinputs;j++){
+			for(k=0;k<(*nf)->nf[i][j].numnextstates;k++){
+				(*epc[l])->state=(*nf)->nf[i][j].a[k];
+				epsclosure(nf,epc[l]);
+			}
+			for(m=0;m<l;m++){//check if new epsilon closure created here is not an existing old one 
+					if((*epc[m])->ns==(*epc[l])->ns){
+						for(i1=0;i1<(*epc[m])->ns;(i1)++){
+							if((*epc[m])->closure[i1]!=(*epc[l])->closure[i1])
+								 break;
+						}
+						if(i1==(*epc[m])->ns){
+						fls[j]=true;
+						l1=m;	
+						}
+					}
+				}
+				if(fls[j]==true) {
+				l--;
+				(*df)->dftb[l][j]=l1;	
+				}else{
+				//update move of the dfa on state l-1 and input j
+				(*df)->numstates+=1;
+				(*df)->dftb[l-1][j]=l++;
+				}
+		}
+		if(fls[0]==true && fls[1]==true) extw=true;
+	}
+	if(extw==true) break;
+}	
+	//update finalstates and start state start state is always zero by construction
+	(*df)->stst=0;
+	for(i=0;i<l;i++){
+		for(j=0;j<(*epc[i])->ns;j++){
+		//if(epc[i]->closure[j]==belongs to final states)
+			for(k=0;k<(*nf)->nfst;k++){
+				if((*epc[i])->closure[j]=(*nf)->finalst[k])
+				(*df)->finalst[((*df)->nfst)++]=i;
+			}
+		}
+	}
+	return true;	
+}
+
+
+bool display(dfa **dfatb){
+if((*dfatb)==NULL){printf("null dfa\n"); return false;}
+	int i,j;
+	char c;
+	printf("Start state: %d\n",(*dfatb)->stst);
+	printf("Final states:  ");
+	for(i=0;i<(*dfatb)->nfst;i++) printf("%d ",(*dfatb)->finalst[i]);
+	printf("\n");
+	for(i=0;i<(*dfatb)->numstates;i++){
+		printf("State %d: \n",i);
+		for(j=0;j<(*dfatb)->numinputs;j++){
+			c=(j==0)?'a':'b';
+			printf("Input %c next state: %d",c,(*dfatb)->dftb[i][j]);
+		}
+	}
+	 return true;
+}
+
+bool finalpartition(dfa** df,partition** pold,partition** pnew,partition** finalp);
+
+bool optfinal(dfa** df,dfa** optdf,partition** pold,partition** pnew,partition** finalp){
+	if(!finalpartition(df,pold,pnew,finalp)) return false;
+	int newstates[(*df)->numstates],finalst[(*df)->numstates],stst;
+	int i,j,k,l,fi=0,mov;
+	for(i=0;i<(*finalp)->numsets;i++)
+	{
+		newstates[i]=(*finalp)->set[i][0];
+		for(j=0;j<(*finalp)->numel[i];j++){
+			for(k=0;k<(*df)->nfst;k++){
+			if((*df)->finalst[k]==(*finalp)->set[i][j])
+				finalst[fi++]=i;//final states of the new dfa
+			}
+			if((*df)->stst==(*finalp)->set[i][j])
+				stst=i; //index of the set containing start state
+		}
+	}
+	//Prepare memory for the new dfa
+	(*optdf)=(dfa*)malloc(sizeof(dfa));
+	if(!(*optdf)){printf("Error malloc (*optdf) in optfinal\n"); return false;}
+	(*optdf)->numstates=(*finalp)->numsets;
+	(*optdf)->numinputs=(*df)->numinputs;
+	(*optdf)->nfst=fi;
+	
+	//update moves
+		for(i=0;i<(*df)->numstates;i++){
+			for(j=0;j<(*df)->numinputs;j++){
+				for(k=0;k<(*finalp)->numel[i];k++){
+						//find the move map in new dfa
+						for(l=0;l<(*finalp)->numsets;l++){
+							if(newstates[l]==(*df)->dftb[(*finalp)->set[i][k]][j])
+							mov=l;						  
+						}
+					(*optdf)->dftb[i][j]=mov;
+				}
+				
+			}
+		}
+	//update final states and start states
+		for(i=0;i<(*optdf)->nfst;i++){
+			(*optdf)->finalst[i]=finalst[i];
+		}
+	(*optdf)->stst=stst;
+	return true;
+		
+}
+bool new_partition(dfa** df,partition** oldp,partition** newp);
+bool finalpartition(dfa** df,partition** pold,partition** pnew,partition** finalp){
+	//Initially partition into two one having final states and other having nonfinal states
+	(*pold)=(partition*)malloc(sizeof(partition));
+	if(!(*pold)){printf("Error malloc (*pold ) in finalpartition\n"); return false;}
+	(*pold)->numsets=2;
+	int i,j,k=0;
+	for(i=0;i<(*df)->nfst;i++){
+		(*pold)->set[0][i]=(*df)->finalst[i];
+	}
+	(*pold)->numel[0]=(*df)->nfst;
+	(*pold)->numel[1]=0;
+	//nonfinal states in second set of the partition
+	for(i=0;i<(*df)->numstates;i++){
+		//if(i==(*df)->nfst[j])
+		for(j=0;j<(*df)->nfst;j++){
+			if(i==((*df)->finalst[j]))
+			break;
+		}
+		if(j==(*df)->nfst){
+		(*pold)->set[1][k++]=i;
+		(*pold)->numel[1]++;
+		}		
+	}
+	new_partition(df,pold,pnew);
+	while((*pnew)!=(*pold)){
+	 
+	(*pold)=(*pnew);
+	new_partition(df,pold,pnew);
+	}
+	(*finalp)=(*pold);
+	return true;
+}
+bool new_partition(dfa** df,partition** oldp,partition** newp){
+	(*newp)=(partition*)malloc(sizeof(partition));
+	if(!(*newp)){printf("Error malloc (*newp) in new_partition\n"); return false;}
+	int i,j,k,l,m,s1,s2,i1,i2;
+	bool diffr=false,included[(*df)->numstates];
+	//initialize included(in some set of (*newp)) false for each of the states
+	for(i=0;i<(*df)->numstates;i++) included[i]=false;
+	(*newp)->numsets=0;
+	for(i=0;i<(*oldp)->numsets;i++){//for each set in partition (*oldp)
+		for(j=0;j<(*oldp)->numel[i]-1;j++){ //take each state less than last one in set i
+			if(included[j]==true) continue;
+			(*newp)->set[(*newp)->numsets][(*newp)->numel[(*newp)->numsets]++]=j;
+			included[j]=true;
+			for(k=j+1;k<(*oldp)->numel[i];k++){ //Compare  its moves with those of all remaining states(in set i) greater than j 
+				if(included[k]==true) continue;
+				diffr=false;
+				for(l=0;l<(*df)->numinputs;l++){
+					
+					//find the set in which state j goes on input l
+					for(i1=0;i1<(*oldp)->numsets;i1++){
+						 for(m=0;m<(*oldp)->numel[i1];m++){
+						if((*df)->dftb[j][l]==(*oldp)->set[i1][m])
+							s1=i1;
+						}
+					}
+					//find the set in which state k goes on input l
+					for(i2=0;i2<(*oldp)->numsets;i2++){
+						 for(m=0;m<(*oldp)->numel[i2];m++){
+						if((*df)->dftb[k][l]==(*oldp)->set[i2][m])
+							s2=i2;
+						}
+					}
+					//If moves from j and k doesn't belong to the same set of partition (*oldp)
+					if(s1!=s2){
+						diffr=true;
+						break;
+					}
+
+				}
+				//if j and k have all similar moves
+				//add j and k in the same set of (*newp)
+				if(diffr==false){
+				(*newp)->set[(*newp)->numsets][(*newp)->numel[(*newp)->numsets]++]=k;
+				}
+			}
+		(*newp)->numsets++;
+		(*newp)->numel[(*newp)->numsets]=0;
+		}
+	}
+return true;
+}
+/******simulate dfa*******************/
+//s is a postfix expre
+bool simulate_dfa(char s[],dfa** df){
+	int i=0,ln=strlen(s),cur_state=(*df)->stst,j=0,k;
+	char token=s[i];
+	while(i<ln){
+		token=s[i];
+		j=(token=='a')?0:1;
+		if(cur_state!=-1)
+		cur_state=(*df)->dftb[cur_state][j];
+		++i;
+	}
+	for(k=0;k<(*df)->nfst;k++){
+		if(cur_state==(*df)->finalst[k])
+		return true;
+	}
+	return false;
+}
+/*****driver program********/
+int main()
+{
+     metanfa*n1,*n2,*n3,*n4;
+     dfa* d1,*optd;
+	epcls** epc;
+	epc=(epcls**)malloc(100*sizeof(epcls*));
+     partition* finalp,*pnew,*pold;
+     n4=(metanfa*)malloc(sizeof(metanfa));
+     char sp[20],*t;
+     char s[]="a+";//"a*";//"a.b";//"a|b";//"(((a+).(a*))|b)";
+	printf("Pls enter the infix expression to get its dfa\n");
+     scanf("%s",s);
+	
+    int x=strlen(s);
+    if(!valida(s,0,x-1)){printf("please enter a valid infix expression\n");return -1;}
+    t=inpost(s,sp);
+    printf("%s\n",sp);
+    parse_postfix(sp,&n1,&n2,&n3,&n4);
+    print_nfa(&n4);
+    nfa_dfa(&n4,&d1,&epc); 
+    display(&d1);
+    optfinal(&d1,&optd,&pold,&pnew,&finalp);
+    display(&d1);
+    printf("Enter the string to simulate the dfa on\n");
+    scanf("%s",sp);
+    if(simulate_dfa(sp,&optd)) printf("accepted\n");
+    else printf("Rejected\n");
+    return 0;
+}
+

@@ -1,0 +1,361 @@
+%{
+#include "grp23l.yy.h"
+void comment();
+int linecount();;
+%}
+
+/***Regular Definitions**/
+delim [ \t\n]
+ws    {delim}+
+letter [A-Za-z_]
+digit  [0-9]
+id	{letter}({letter}|{digit})*
+number	{digit}+(\.{digit}+)?(E[+-]?{digit}+)?
+%%
+"/*" {comment();}
+"::" {linecount(); return OP_RESOLVE;}
+"->" {linecount(); return OP_PTR;}
+"~"  {linecount(); return "~";}
+"!"  {linecount(); return "!";}
+"-"  {linecount(); return "-";}
+"&"  {linecount(); return "&";}
+"*"  {linecount(); return "*";}
+"+"  {linecount(); return "+";}
+"<"  {linecount(); return "<";}
+">"  {linecount(); return ">";}
+"&&" {linecount(); return AND;}
+"||"  {linecount(); return OR;}
+"="		{linecount(); return "=";}
+","		{linecount(); return ",";}
+{ws}  { linecount(); return WHITESPACE}
+"if" 		{linecount(); return (IF);}
+"then" 	{ linecount(); return (THEN)}
+"else" 	{ linecount(); return (ELSE);}
+"while"	{ linecount(); return (WHILE);}
+"do"       {linecount(); return (DO);}
+"return"  {linecount();  return RETURN;}
+"break"		{linecount(); return BREAK;}
+"continue" {linecount(); return CONTINUE;}
+"for" 		{linecount(); return FOR;}
+"switch"	{linecount(); return SWITCH;}
+"default"	{linecount(); return DEFAULT;}
+":" 	{linecount(); return ":";}
+"case"	{linecount(); return CASE;}
+{number} {linecount(); return FLOAT_CONST;}
+{digit}+ {linecount(); return INT_CONST;}
+letter?\"(\\.|[^\\"])*\" {linecount(); return STR_LITERAL;}
+"bool" {linecount(); return BOOL;}
+"true" {linecount(); return TRUE;}
+"false" {linecount(); return FALSE;}
+EOF      {linecount(); return (EOF);}
+"const" {linecount(); return CONST;}
+"void" {linecount(); return VOID;}
+"int" {linecount(); return INT;}
+"float" {linecount(); return FLOAT;}
+"signed" {linecount(); return SIGNED;}
+"unsigned" {linecount(); return UNSIGNED;}
+"print"  {linecount(); return PRINT;}
+"scan"	{linecount(); return SCAN;}
+"global" {linecount(); return GLOBAL;}
+"typedef" {linecount(); return TYPEDEF;}
+"==" {linecount(); return EQ;}
+"<=" {linecount(); return LE;}
+"!=" {linecount(); return NE;}
+"<<" {linecount(); return OP_OUT;}
+">>" {linecount(); return OP_IN;}
+"NULL" {linecount(); return NULL;}
+{id} {linecount(); return ID;}
+%% 
+
+
+void comment()
+{
+	char c, c1;
+
+loop:
+	while ((c = input()) != '*' && c != 0)
+		putchar(c);
+
+	if ((c1 = input()) != '/' && c != 0)
+	{
+		unput(c1);
+		goto loop;
+	}
+
+	if (c != 0)
+		putchar(c1);
+}
+
+
+int column = 0;
+
+void linecount()
+{
+	int i;
+
+	for (i = 0; yytext[i] != '\0'; i++)
+		if (yytext[i] == '\n')
+			column = 0;
+		else if (yytext[i] == '\t')
+			column += 8 - (column % 8);
+		else
+			column++;
+
+	ECHO;
+}
+/****bison********/
+%{
+	#include<stdio.h>
+	#include<stdlib.h>
+	extern int yylex(void);
+	extern char* yytext ;
+	void yyerror(char *);
+
+	struct node{
+	string name;
+	vector<node*> child;
+	node (string attr)	//constructor mkleaf
+	{
+		name = attr;
+	}
+	node(vector<node*> v , string attr) //constructor for mknode
+	{
+		child = v	//copy constructor
+		name = attr;
+	}
+	typedef struct node node;
+%}
+//http://web.eecs.utk.edu/~bvz/teaching/cs461Sp11/notes/bison/
+%union {
+char* charv;
+struct node* nodeP;
+int		intv;
+double 	floatv;
+char    charv;
+} 
+
+%token <strv>ID STR_LITERAL WHITESPACE NULL
+%token <strv>OP_PTR OP_RESOLVE OP_OUT OP_IN AND OR LE GE EQ NE
+/*
+OP_PTR '->'
+AND && 
+OR ||
+OP_RESOLVE ::
+*/
+
+%token <strv>TYPEDEF GLOBAL PRINT SCAN 
+%token <strv>INT SIGNED UNSIGNED FLOAT CONST VOID
+%token<intv> BOOL EOF INT_CONST
+%token<floatv> FLOAT_CONST
+%token<strv> CASE DEFAULT IF ELSE SWITCH WHILE DO FOR CONTINUE BREAK RETURN
+%left ','
+%right '='
+%left OR
+%left AND
+%left '<' '>'
+%left '+' '-'
+%left '*' '/'
+%right DEREFERENCE //*
+%right '&'
+%right UMINUS
+%right '!'
+%right '~'
+%left OP_PTR
+%right OP_RESOLVE 
+
+%start strtP
+
+%type <nodeP> strtP GlobalDecl FuncDefn MainFunc GLOBAL VarDecl VarDeclList InitVar InitVarList TypeDecl PointerDecl PointerDeclList ArrayDecl ArrayInit ArrayInitList Type Type_Id Prefix TypeId BlockStmt Boolean Args LocalDecl Stmt Exp For Dowhile IfStmt ReturnStmt Uif Assign UnaryOp Binaryop Args ArgList StmtList ExpList InitvarOpt InitOpt AmpOpt DerefOpt Subscript1Opt Subscript2Opt LeftBrOpt RightBrOpt LocalDeclOpt InOut
+%%
+
+StrtP: GlobalDecl {vector<node*> v; v.push_back($1) ; $$ = mknode(v,"strtP"}
+	 | FuncDefn		{vector<node*> v; v.push_back($1) ; $$ = mknode(v,"strtP"}
+	 | MainFunc		{vector<node*> v; v.push_back($1) ; $$ = mknode(v,"strtP"}
+	 | error EOF	{vector<node*> v; v.push_back(mkleaf("error")) ; $$ = mknode(v,"strtP"}
+	 ;
+GlobalDecl: GLOBAL VarDecl {vector<node*> v; v.push_back(mkleaf("GLOBAL")); v.push_back($2) ; $$ = mknode(v,"GlobalDecl");}
+  	 | GLOBAL TypeDecl 	{vector<node*> v; v.push_back(mkleaf("GLOBAL")); v.push_back($2) ; $$ = mknode(v,"GlobalDecl");}
+  	 | GLOBAL PointerDecl {vector<node*> v; v.push_back(mkleaf("GLOBAL")); v.push_back($2) ; $$ = mknode(v,"GlobalDecl");}
+  	 | GLOBAL ArrayDecl  {vector<node*> v; v.push_back(mkleaf("GLOBAL")); v.push_back($2) ; $$ = mknode(v,"GlobalDecl");}
+  	 ;
+VarDecl:  Type ID InitvarOpt VarDeclList ';' {vector<node*> v; v.push_back($1); v.push_back(mkleaf("ID")); v.push_back(mkleaf("=")); v.push_back($5); v.push_back($7); v.push_back(";"); $$= mknode(v,"VarDecl"); }
+		| error ';' {vector<node*> v; v.push_back(mkleaf("error")); v.push_back(mkleaf(";")); $$= mknode(v,"VarDecl");}
+	;
+VarDeclList: ',' ID InitvarOpt VarDeclList {vector<node*> v; v.push_back(mkleaf(",")); v.push_back(mkleaf("ID"));v.push_back($3); v.push_back($4); $$ = mknode(v,"VarDeclList");}
+		| /*empty**/ {vector<node*> v; v.push_back("empty"); $$ = mknode(v,"VarDeclList");}
+		;
+		InitvarOpt: '=' Initvar {vector<node*> v; v.push_back(mkleaf("=")); v.push_back($2); $$ = mknode(v,"InitvarOpt");}
+					| /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"InitvarOpt");}
+ 					; 
+Initvar: INT_CONST  {vector<node*> v; v.push_back(mkleaf("INT_CONST")); $$ = mknode(v,"Initvar");}
+	| FLOAT_CONST    {vector<node*> v; v.push_back(mkleaf("FLOAT_CONST")); $$ = mknode(v,"Initvar");} 
+	| Boolean		{vector<node*> v; v.push_back(mkleaf($1)); $$ = mknode(v,"Initvar");}
+	;
+Boolean: TRUE     {vector<node*> v; v.push_back(mkleaf("TRUE")); $$ = mknode(v,"Boolean");}
+	| FALSE			{vector<node*> v; v.push_back(mkleaf("FALSE")); $$ = mknode(v,"Boolean");}
+	;
+PointerDecl: Type '*' %prec DEREFERENCE ID InitOpt PointerDeclList ';' {vector<node*> v; v.push_back($1); v.push_back(mkleaf("*")); v.push_back(mkleaf("%prec"));  v.push_back(mkleaf("DEREFERENCE")); v.push_back(mkleaf("ID")); $$ = mknode(v,PointerDecl);}
+	| error ';' {vector<node*> v; v.push_back(mkleaf("error")); v.push_back(mkleaf(";")); $$ = mknode(v,"PointerDecl");}
+	;
+PointerDeclList: ',' '*' %prec DEREFERENCE ID InitOpt PointerDeclList { vector<node*> v; v.push_back(mkleaf(",")); v.push_back("*"); v.push_back(mkleaf("%prec"));  v.push_back(mkleaf("DEREFERENCE")); v.push_back(mkleaf("ID")); v.push_back($6); v.push_back($7); $$ = mknode(v,"PointerDeclList");}
+	| /*empty*/ { vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"PointerDeclList");}
+	;
+	InitOpt: '=' Initialize  {vector<node*> v; v.push_back(mkleaf("=")); v.push_back($2); $$ = mknode(v,"InitOpt");}
+			| /*empty*/ 	{vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"InitOpt");}
+			;
+Initialize: NULL {vector<node*> v; v.push_back(mkleaf("NULL")); $$ = mknode(v,"Initialize");}
+	| AmpOpt ID  { vector<node*> v; v.push_back($1); v.push_back(mkleaf("ID")); $$ = mknode(v,"Initialize");}
+	| DerefOpt ID   { vector<node*> v; v.push_back($1); v.push_back(mkleaf("ID")); $$ = mknode(v,"Initialize");}
+	;
+	AmpOpt: '&'			{vector<node*> v; v.push_back(mkleaf("&")); $$ = mknode(v,"AmpOpt");}
+			| /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"AmpOpt");}
+			;
+	DerefOpt: '*'	%prec DEREFERENCE	{vector<node*> v; v.push_back(mkleaf("*")); v.push_back(mkleaf("%prec")); v.push_back(mkleaf("DEREFERENCE")); $$ = mknode(v,"DerefOpt");}
+			| /*empty*/	{vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"DerefOpt");}
+			;
+ArrayDecl: Type ID '[' INT_CONST ']' Subscript1Opt Subscript2Opt ';' {vector<node*> v; v.push_back($1); v.push_back(mkleaf("ID")); v.push_back(mkleaf("[")); v.push_back(mkleaf("INT_CONSTANT")); v.push_back(mkleaf("]")); v.push_back($6); v.push_back($7); v.push_back(";"); $$ = mknode(v,"ArrayDecl"); }
+	| error ';' {vector<node*> v; v.push_back(mkleaf("error")); v.push_back(mkleaf(";")); $$ = mknode(v,"ArrayDecl");}
+	; 
+	Subscript1Opt:  '[' INT_CONST ']' {vector<node*> v; v.push_back(mkleaf("[")); v.push_back(mkleaf("INT_CONST")); v.push_back("]"); $$ = mknode(v,"Subscript1Opt");}
+				| /*empty*/ {vector<node*> v; v.push_back("empty"); $$ = mknode(v,"Subscript1Opt");}
+				;
+	Subscript2Opt: '=' ArrayInit {vector<node*> v; v.push_back(mkleaf("=")); v.push_back($2); $$ = mknode(v,Subscript2Opt);}
+				 |/*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"Subscript2Opt");}
+				 ;
+ArrayInit: '{' LeftBrOpt InitVar InitVarList RightBrOpt ArrayInitList '}' {vector<node*> v; v.push_back(mkleaf("{")); v.push_back($2); v.push_back($3); v.push_back($4); v.push_back($5); v.push_back($6); v.push_back(mkleaf("}")); $$ = mknode(v,"ArrayInit");}
+InitVarList: ',' InitVar InitVarList {vector<node*> v; v.push_back(mkleaf(","));v.push_back($2); v.push_back($3); $$ = mknode(v,"InitVarList");}
+		|/*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"InitVarList");}
+		;
+	LeftBrOpt: '{' { vector<node*> v; v.push_back(mkleaf("{")); $$ = mknode(v,"LeftBrOpt");}
+			| /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"LeftBrOpt");}
+			;
+	RightBrOpt: '}' {vector<node*> v; v.push_back(mkleaf("}")); $$ = mknode(v,"RightBrOpt");}
+			| /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"RightBrOpt");}
+			;
+ArrayInitList: ',' LeftBrOpt InitVar InitVarList RightBrOpt ArrayInitList {vector<node*> v; v.push_back(mkleaf(",")); v.push_back($2); v.push_back($3); v.push_back($4);v.push_back($5); v.push_back($6); $$ = mknode(v,"ArrayInitList");}
+	| /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"ArrayInitList");}
+	;
+TypeDecl: TYPEDEF Type ID ';' {vector<node*> v; v.push_back(mkleaf("TYPEDEF")); v.push_back($2); v.push_back(mkleaf("ID")); v.push_back(mkleaf(";")); $$ = mknode(v,"TypeDecl");}
+	| error ';' {vector<node*> v; v.push_back(mkleaf("error")); v.push_back(mkleaf(";")); $$ = mknode(v,"TypeDecl");}
+	;
+Type: Prefix TypeId { vector<node*> v; v.push_back($1); v.push_back($2); $$ = mknode(v,"Type");}
+	;
+Prefix: CONST { vector<node*> v; v.push_back(mkleaf("LEAF")); $$ = mknode(v,Prefix);}
+	;
+	
+TypeId: INT  { vector<node*> v; v.push_back(mkleaf("INT")); $$ = mknode(v,"TypeId");}
+	| BOOL  { vector<node*> v; v.push_back(mkleaf("BOOL")); $$ = mknode(v,"TypeId");}
+	| FLOAT { vector<node*> v; v.push_back(mkleaf("FLOAT")); $$ = mknode(v,"TypeId");}
+	| VOID  { vector<node*> v; v.push_back(mkleaf("VOID")); $$ = mknode(v,"TypeId");}
+	;
+MainFunc: TypeId main '(' ')' BlockStmt {vector<node*> v; v.push_back($1); v.push_back(mkleaf("main")); v.push_back(mkleaf("(")); v.push_back(mkleaf(")")); v.push_back($5); $$ = mknode(v,"MainFunc");}
+	;
+	/***return type ****/
+FuncDefn:  TypeId DerefOpt DerefOpt ID '(' Type DerefOpt DerefOpt ID ArgList ')' BlockStmt {vector<node*> v; v.push_back($1); v.push_back($2); v.push_back($3); v.push_back(mkleaf("ID")); v.push_back(mkleaf("(")); v.push_back($6); v.push_back($7); v.push_back($8); v.push_back($9); v.push_back($10); v.push_back(mkleaf(")")); $$ = mknode(v,"FuncDefn"); }
+	;
+ArgList: ',' Type DerefOpt DerefOpt ID ArgList {vector<node*> v; v.push_back(mkleaf(",")); v.push_back($2); v.push_back($3); v.push_back($4); v.push_back(mkleaf("ID")); v.push_back($6); $$ = mknode(v,"ArgList");}
+	| /*empty**/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"ArgList");}
+	;
+BlockStmt: '{' LocalDeclOpt StmtList '}' {vector<node*> v; v.push_back(mkleaf("{")); v.push_back($2); v.push_back($3); v.push_back(mkleaf("}")); $$ = mknode(v,"BlockStmt");}
+	| error '}' {vector<node*> v; v.push_back(mkleaf("error")); v.push_back(mkleaf("}")); $$ = mknode(v,"BlockStmt");}
+	;
+	LocalDeclOpt: LocalDecl {vector<node*> v; v.push_back($1); $$ = mknode(v,"LocalDeclOpt"); $$ = mknode(v,"LocalDeclOpt");}
+				|/*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"LocalDeclOpt");}
+				;
+StmtList: stmtList Stmt {vector<node*> v; v.push_back($1); v.push_back($2); $$ = mknode(v,"StmtList");}
+		| /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"StmtList");} 
+		;
+LocalDecl: VarDecl {vector<node*> v; v.push_back($1); $$ = mknode(v,"LocalDecl");}
+		| PointerDecl {vector<node*> v; v.push_back($1); $$ = mknode(v,"LocalDecl");}
+		| TypeDecl {vector<node*> v; v.push_back($1); $$ = mknode(v,"LocalDecl");}
+		;
+Stmt: BlockStmt {vector<node*> v; v.push_back($1); $$ = mknode(v,"Stmt");}
+	| ';' {vector<node*> v; v.push_back(mkleaf(";")); $$ = mknode(v,"Stmt");}
+	| Exp {vector<node*> v; v.push_back($1); $$ = mknode(v,"Stmt");}
+	| For  {vector<node*> v; v.push_back($1); $$ = mknode(v,"Stmt");}
+	| DoWhile {vector<node*> v; v.push_back($1); $$ = mknode(v,"Stmt");} 
+	| IfStmt   {vector<node*> v; v.push_back($1); $$ = mknode(v,"Stmt");}
+	| ReturnStmt {vector<node*> v; v.push_back($1); $$ = mknode(v,"Stmt");}
+	;
+For: FOR '(' Exp ';' Exp ';' Exp ')' BlockStmt { vector<node*> v; v.push_back(mkleaf("FOR")); v.push_back(mkleaf("(")); v.push_back($3); v.push_back(mkleaf(";")); v.push_back($5); v.push_back(mkleaf(";")); v.push_back($7); v.push_back(mkleaf(")")); v.push_back($9); $$ = mknode(v,"For");}
+	;
+IfStmt: IF '(' Exp ')' BlockStmt Uif {vector<node*> v; v.push_back(mkleaf("IF")); v.push_back(mkleaf("(")); v.push_back($3); v.push_back(")"); v.push_back($5); v.push_back($6); v.push_back($7); $$ = mknode(v,"IfStmt");}
+	;
+}
+Uif: /*empty*/ {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"Uif");}
+	| ELSE BlockStmt {vector<node*> v; v.push_back(mkleaf("ELSE")); v.push_back($2); $$ = mknode(v,"Uif");}
+	;
+DoWhile: DO BlockStmt WHILE '(' Exp ')' ';' {vector<node*> v; v.push_back(mkleaf("DO")); v.push_back($2); v.push_back(mkleaf("WHILE")); v.push_back(mkleaf("(")); v.push_back($5); v.push_back(mkleaf(")")); v.push_back(mkleaf(";")); $$ = mknode(v,"DoWhile");}
+	;
+}
+ReturnStmt: RETURN Exp ';' {vector<node*> v; v.push_back(mkleaf("RETURN")); v.push_back($2); v.push_back(mkleaf(";")); $$ = mknode(v,"ReturnStmt");}
+		| RETURN ';' {vector<node*> v; v.push_back(mkleaf("RETURN")); v.push_back(mkleaf(";")); $$ = mknode(v,"ReturnStmt");}
+	; 
+Exp: ID  {vector<node*> v; v.push_back(mkleaf("ID"));  $$ = mknode(v,"Exp");}
+	|'(' Exp ')' {vector<node*> v; v.push_back(mkleaf("(")); v.push_back($2); v.push_back(mkleaf(")")); $$ = mknode(v,"Exp");}
+	| Exp '=' Exp {vector<node*> v; v.push_back($1); v.push_back(mkleaf("=")); v.push_back($3); $$ = mknode(v,"Exp");}
+	| Exp Assign Exp {vector<node*> v; v.push_back($1); v.push_back($2); v.push_back($3); $$ = mknode(v,"Exp");}
+	| Unaryop Exp {vector<node*> v; v.push_back($1); v.push_back($2); $$ = mknode(v,"Exp");}
+	| ID '[' INT_CONST ']' ArSbOpt  {vector<node*> v; v.push_back(mkleaf("ID")); v.push_back(mkleaf("[")); v.push_back(mkleaf("INT_CONST")); v.push_back(mkleaf("]")); v.push_back($5);}
+	| Exp Binaryop Exp {vector<node*> v; v.push_back($1); v.push_back($2); v.push_back($3); $$ = mknode(v,"Exp");}
+	| Exp '(' Args ')' {vector<node*> v; v.push_back($1); v.push_back(mkleaf("(")); v.push_back($3); v.push_back(mkleaf(")")); $$ = mknode(v,"Exp");}
+	| InOut { vector<node*> v; v.push_back($1); $$ = mknode(v,"Exp");}
+	| TRUE {vector<node*> v; v.push_back(mkleaf("TRUE")); $$ = mknode(v,"Exp");}
+	| FALSE {vector<node*> v; v.push_back(mkleaf("FALSE")); $$ = mknode(v,"Exp");}
+	| INT_CONST {vector<node*> v; v.push_back(mkleaf("INT_CONST")); $$ = mknode(v,"Exp");}
+	| FLOAT_CONST {vector<node*> v; v.push_back(mkleaf("FLOAT_CONST")); $$ = mknode(v,"Exp");}
+	|STR_LITERAL {vector<node*> v; v.push_back(mkleaf("STR_LITERAL")); $$ = mknode(v,"Exp");}
+	| GLOBAL OP_RESOLVE Exp {vector<node*> v; v.push_back(mkleaf("GLOBAL")); v.push_back(mkleaf("OP_RESOLVE")); v.push_back($3); $$ = mknode(v,"Exp");}
+	;
+Assign: EQ {vector<node*> v; v.push_back(mkleaf("EQ")); $$ = mknode(v,"Assign");}
+		| LE {vector<node*> v; v.push_back(mkleaf("LE")); $$ = mknode(v,"Assign");}
+		| GE  {vector<node*> v; v.push_back(mkleaf("GE")); $$ = mknode(v,"Assign");}
+		|NE    {vector<node*> v; v.push_back(mkleaf("NE")); $$ = mknode(v,"Assign");}
+		;
+ArSbOpt: '[' INT_CONST ']' {vector<node*> v; v.push_back(mkleaf("[")); v.push_back(mkleaf("INT_CONST")); v.push_back("]"); $$ = mknode(v,"ArSbOpt");}  
+		| /*empty*/ {vector<node*> v; v.push_back("empty"); $$ = mknode(v,"ArSbOpt"); }
+		;
+InOut: PRINT OP_OUT ID ';' {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("ID")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| PRINT OP_OUT INT_CONST ';' {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("INT_CONST")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| PRINT OP_OUT FLOAT_CONST ';'  {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("FLOAT_CONST")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| PRINT OP_OUT STR_LITERAL ';'  {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("STR_LITERAL")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| PRINT OP_OUT TRUE ';'   {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("TRUE")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| PRINT OP_OUT FALSE ';' {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("FALSE")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| PRINT OP_OUT WHITESPACE ';'  {vector<node*> v; v.push_back(mkleaf("PRINT")); v.push_back(mkleaf("OP_OUT")); v.push_back(mkleaf("WHITESPACE")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	| SCAN OP_IN ID ';'  {vector<node*> v; v.push_back(mkleaf("SCAN")); v.push_back(mkleaf("OP_IN")); v.push_back(mkleaf("ID")); v.push_back(mkleaf(";")); $$ = mknode(v,"InOut");}
+	;	
+/*for function call*/
+Args:  Exp ExpList  {vector<node*> v; v.push_back($1); v.push_back($2); $$ = mknode(v,"Args");}
+	|/*empty*/    {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"Args");}
+	;
+ExpList: ',' Exp ExpList  {vector<node*> v; v.push_back(mkleaf(",")); v.push_back($2); v.push_back($3); $$ = mknode(v,"ExpList");}
+	| /*empty*/  {vector<node*> v; v.push_back(mkleaf("empty")); $$ = mknode(v,"ExpList");}
+	; 
+Unaryop: '*' %prec DEREFERENCE  {vector<node*> v; v.push_back(mkleaf("*")); v.push_back(mkleaf("%prec")); v.push_back(mkleaf("DEREFERENCE")); $$ = mknode(v,"Unaryop");}
+		| '~'  {vector<node*> v; v.push_back(mkleaf("~")); $$ = mknode(v,"Unaryop");}
+		| '!'	 {vector<node*> v; v.push_back(mkleaf("!")); $$ = mknode(v,"Unaryop");}
+		| '-' %prec UMINUS 	{vector<node*> v; v.push_back(mkleaf("-")); v.push_back(mkleaf("%prec")); v.push_back(mkleaf("UMINUS")); $$ = mknode(v,"Unaryop");}
+		| '&'  	{vector<node*> v; v.push_back(mkleaf("&")); $$ = mknode(v,"Unaryop");}
+		;
+Binaryop: ','  {vector<node*> v; v.push_back(mkleaf(",")); $$ = mknode(v,"Binaryop");}
+		| AND 	{vector<node*> v; v.push_back(mkleaf("AND")); $$ = mknode(v,"Binaryop");}
+		| OR    {vector<node*> v; v.push_back(mkleaf("OR")); $$ = mknode(v,"Binaryop");}
+		| '<'	{vector<node*> v; v.push_back(mkleaf("<")); $$ = mknode(v,"Binaryop");}
+		| '>'	{vector<node*> v; v.push_back(mkleaf(">")); $$ = mknode(v,"Binaryop");}
+		| '+'	{vector<node*> v; v.push_back(mkleaf("+")); $$ = mknode(v,"Binaryop");}
+		| '-'	{vector<node*> v; v.push_back(mkleaf("-")); $$ = mknode(v,"Binaryop");}
+		| '*'	{vector<node*> v; v.push_back(mkleaf("*")); $$ = mknode(v,"Binaryop");}
+		| '/'	{vector<node*> v; v.push_back(mkleaf("/")); $$ = mknode(v,"Binaryop");}
+		| OP_PTR	{vector<node*> v; v.push_back(mkleaf("OP_PTR")); $$ = mknode(v,"Binaryop");}
+		;
+
+%%
+
+struct node* mknode(vector<node*> v,string attr){
+	struct node* n = new node(v,attr);
+	return n;
+}
+struct node* mkleaf(string attr){
+	struct node* n = new node(attr);
+	return n;
+}

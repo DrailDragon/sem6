@@ -1,0 +1,865 @@
+/**********makefile***********/
+all:
+	yacc -d -v -t grp23.y
+	flex grp23.l
+	g++ -std=c++11 -g lex.yy.c y.tab.c y.tab.h -o parser23 -lfl
+
+/************lexfile grp23.l*****************/
+%{
+#include "y.tab.h"
+#include<iostream>
+using namespace std;
+int lineNum=1;
+%}
+/***Regular Definitions**/
+delim [\t ]
+ws    {delim}+
+letter [A-Za-z_]
+digit  [0-9]
+id	{letter}({letter}|{digit})*
+number	{digit}+(\.{digit}+)?(E[+-]?{digit}+)?
+%%
+";" { return ';';}
+"-"  {  return '-';}
+"*"  {  return '*';}
+"+"  { return '+';}
+"&" {  return '&';}
+"|"  { return '|';}
+"==" {  return EQ;}
+"<=" { return LE;}
+"!=" { return NE;}
+">>" { return OP_IN;}
+"<"  { return '<';}
+">"  { return '>';}
+"="		{  return '=';}
+","		{  return ',';}
+\n	{ lineNum++;}
+" "
+ws  {  return WHITESPACE;}
+"(" {return '(';}
+")"	{ return ')';}
+"{" { return '{';}
+"}"	{return '}';}
+"if" 		{  return (IF);}
+"else" 	{  return (ELSE);}
+"while"	{  return (WHILE);}
+"do"       {  return (DO);}
+"return"  {   return RETURN;}
+"break"		{  return BREAK;}
+"continue" {  return CONTINUE;}
+"for" 		{ return FOR;}
+"switch"	{  return SWITCH;}
+"default"	{  return DEFAULT;}
+"case"	{  return CASE;}
+{digit}+ { yylval.intv=atoi(yytext); return INT_CONST;}
+\"(\\.|[^"])*\" { yylval.strv = strdup(yytext);   return STR_LITERAL;}
+
+"bool" {   return BOOL;}
+"true" {  return TRUEV;}
+"false" {return FALSEV;}
+"const" {  return CONST;}
+"void" {  return VOID;}
+"int" {  return INT;}
+"signed" {  return SIGNED;}
+"unsigned" {  return UNSIGNED;}
+"print_int"  { return PRINT_INT;}
+"print_str"  {  return PRINT_STR;}
+"print_var"  {  return PRINT_VAR;}
+"scan"	{  return SCAN;}
+"call" {return CALL;}
+{id} {  yylval.strv= strdup(yytext); return ID;}
+.	{}
+%% 
+int yywrap(){
+	return 1;
+}
+/****bison file grp23.y**************/
+%{
+#include <stdio.h>
+#include <stdlib.h>
+#include <iostream>
+#include <string>
+#include <sstream>
+#include <vector>
+#include <map>
+	using namespace std;
+	
+	void yyerror(const char *s){
+		//print error
+	}
+	int yylex();
+	extern char* yytext;
+	extern int yyleng;
+	extern int lineNum;
+	extern int varscope;
+	int reg_count=0;
+	int label_count=0;
+	struct node{
+		string NonTerminalName;
+		vector<node*> child;
+		string code=""; 
+		string datatype=""; 
+		node(vector<node*> v , string attr) 
+		{
+			child = v;	
+			NonTerminalName = attr;
+		}
+	};
+
+	node* mknode(vector<node*> v,string attr);
+	void preorder(node*);
+	void print_tokens();//test purpose
+	void printSymTab();
+	string getNewReg();
+	string getNewLbl();
+	node* root=NULL;
+
+	
+	vector< map<string,string> > symTab;
+	int varscope=0;
+	bool semanticError = false;
+	bool syntacticError = false;
+	
+	int findIdScope(string id)
+	{
+		for(int i=varscope;i>=0;i--)
+		{
+			if(symTab[i].find(id) != symTab[i].end())	return varscope;
+		}
+		return -1;
+	}
+
+	%}
+
+	%union {
+		char* strv;
+		struct node* nodeP;
+		int	intv;
+	} 
+
+
+%token <strv>ID STR_LITERAL WHITESPACE CALL
+%token <strv> OP_IN AND OR LE GE EQ NE EOL UMINUS 
+
+%token <strv>TYPEDEF PRINT_VAR PRINT_INT PRINT_STR PRINT_FLOAT SCAN 
+%token <strv>INT SIGNED UNSIGNED FLOAT CONST VOID BOOL
+%token<intv>  EOFV INT_CONST TRUEV FALSEV
+%token<strv> CASE DEFAULT IF ELSE SWITCH WHILE DO FOR CONTINUE BREAK RETURN
+
+%nonassoc BINOP
+%right '='
+%left  '|' //bitwise or
+%left '&' //bitwise and
+%left EQ NE
+%left '>' GE
+%left '<' LE
+%left '+' '-'
+%left '*' '/'
+%right '!' '~'
+%right UMINUS
+%nonassoc IFX
+%nonassoc ELSE
+
+
+
+%type <nodeP> StrtP FuncDefn ExtDecl TypeId  Decl Stmt Exp For IfStmt  StmtList InOut Opr Id Integer  Strng Func_Call  BlockStmt
+
+%type<strv> SemiCol LeftParen RightParen LeftBrace RightBrace 
+
+%start StrtP 
+%%
+
+
+StrtP: ExtDecl	
+{
+	vector<node*> v; 
+	v.push_back($1); 
+	$$ = mknode(v,"StrtP");
+	$$->code = $1->code;
+//root=$$;
+	//cout<<"StrtP: ExtDecl"<<endl;
+}
+| StrtP ExtDecl 
+{
+	vector<node*> v; 
+	v.push_back($1); 
+	v.push_back($2);
+	$$= mknode(v,"StrtP");
+	$$->code = $1->code+"\n"+$2->code;
+	root=$$;
+	//cout<<"StrtP->StrtP ExtDecl"<<endl;
+}
+;
+
+
+ExtDecl: Decl 
+{
+	vector<node*> v; 
+	v.push_back($1) ; 
+	$$ = mknode(v,"ExtDecl");
+	$$->code = $1->code;
+	$$->datatype = "";
+//cout<<"ExtDec->Decl"<<endl;
+}
+| FuncDefn		
+{
+	vector<node*> v; 
+	v.push_back($1) ;
+	$$ = mknode(v,"ExtDecl");
+	$$->code = $1->code;
+	$$->datatype = "";
+	//cout<<"ExtDec->\"FuncDefn"<<endl;
+}
+;
+
+
+
+Decl:  TypeId Id SemiCol 
+{	
+	vector<node*> v; 
+	v.push_back($1);
+	v.push_back($2);
+	$$= mknode(v,"Decl");
+	//printSymTab();
+	if(symTab[varscope].find($2->code)==symTab[varscope].end())
+	{
+		symTab[varscope][$2->code] = $1->datatype;
+		$2->datatype = $1->datatype;
+		$$->code = $2->code+" "+$1->code+"\n";
+		
+	}
+	else
+	{
+		semanticError= true;
+		cout <<"Re-declaration of "<<$2->code<< " at line number " << lineNum <<endl;
+	}
+	
+	//cout<<"Decl->TypeId Id SemiCol"<<endl;
+}
+;
+TypeId: INT  
+{ 
+	vector<node*> v;  
+	$$ = mknode(v,"TypeId");
+	$$->code = "int";
+	$$->datatype = "int";
+	//cout<<"TypeId->INT"<<endl;
+}
+| BOOL  
+{ 
+	vector<node*> v; 
+	$$ = mknode(v,"TypeId");
+	$$->code = "bool";
+	$$->datatype = "bool";
+	//cout<<"TypeId->BOOL"<<endl;
+}
+| FLOAT 
+{ 
+	vector<node*> v; 
+	$$ = mknode(v,"TypeId");
+	$$->code = "float";
+	$$->datatype = "float";
+	//cout<<"TypeId->FLOAT"<<endl;
+}
+| VOID 
+{
+	vector<node*> v;
+	$$ = mknode(v,"TypeId");
+	$$->code = "void";
+	$$->datatype = "void";
+	//cout<<"TypeId->VOID"<<endl;
+}
+;
+Id: ID
+	{
+		vector<node*> v;
+		$$ = mknode(v,"Id");
+		$$->code=string(yytext,yyleng);
+	}
+	;
+BlockStmt: LeftBrace 
+	{
+		map<string,string>	m;
+		symTab.push_back(m);
+		varscope++;
+	}
+	StmtList RightBrace 
+	{	
+		vector<node*> v;
+		v.push_back($3); 
+		$$ = mknode(v,"BlockStmt");
+		$$->code = $3->code ; 
+		symTab.pop_back();
+		varscope--;
+	}
+;
+FuncDefn:  TypeId Id LeftParen RightParen BlockStmt
+{
+	vector<node*> v; 
+	v.push_back($1);
+	v.push_back($2);
+	v.push_back($5); 
+	$$ = mknode(v,"FuncDefn");
+	$$->datatype = "";
+	
+	if(symTab[varscope].find($2->code)!=symTab[varscope].end())
+	{
+		cout<<"Re-declaration of function "<<$2->code<<" at line number"<<lineNum<<endl;
+	}
+	else
+	{
+		symTab[varscope][$2->code]=$1->datatype;
+		$$->code = "Fun "+$2->code+"\n"+$5->code+"\n endFun";
+	}
+	//cout<<"FuncDefn:  TypeId ID LeftParen RightParen LeftBrace StmtList RightBrace "<<endl;
+}
+;
+
+
+StmtList: Stmt 
+{
+	vector<node*> v;
+	v.push_back($1); 
+	$$ = mknode(v,"StmtList");
+	$$->code = $1->code;
+	$$->datatype = $1->datatype;
+	//cout<<"StmtList: Stmt "<<endl;
+}
+| StmtList  Stmt
+{
+	vector<node*> v;
+	v.push_back($1);
+	v.push_back($2);
+	$$ = mknode(v,"StmtList");
+	$$->code = $1->code+"\n"+$2->code;
+	//cout<<"StmtList->StmtList  Stmt"<<endl;
+} 
+;
+
+
+
+Stmt: Exp SemiCol 
+{
+	vector<node*> v; 
+	v.push_back($1);  
+	$$ = mknode(v,"Stmt");
+	$$->code= $1->code;
+	$$->datatype = $1->datatype;
+	//cout<<"Exp->Exp SemiCol "<<endl;
+}
+| For  
+{
+	vector<node*> v; 
+	v.push_back($1);
+	$$ = mknode(v,"Stmt");
+	$$->code= $1->code;
+	$$->datatype = $1->datatype;
+	//cout<<"Stmt->For"<<endl;
+}
+| IfStmt   
+{
+	vector<node*> v; 
+	v.push_back($1); 
+	$$ = mknode(v,"Stmt");
+	$$->code= $1->code;
+	$$->datatype = $1->datatype;
+	//cout<<"Stmt->IfStmt"<<endl;
+}
+|Decl
+{
+	//printSymTab();
+	vector<node*> v;
+	v.push_back($1);
+	$$ = mknode(v,"Stmt");
+	$$->code= $1->code;
+	$$->datatype = $1->datatype;
+	//cout<<"Stmt->Decl"<<endl;
+}
+;
+
+
+For: FOR LeftParen Exp SemiCol Exp SemiCol Exp RightParen BlockStmt
+{ 
+	vector<node*> v; 
+	v.push_back($3); //initialize
+	v.push_back($5); 
+	v.push_back($7);  
+	v.push_back($9); 
+	$$ = mknode(v,"For");
+	string lentry = getNewLbl();
+	string lbody = getNewLbl();
+	string lexit = getNewLbl();
+	$$->code =$3->code+"\n"+lentry+": "+"if "+$5->code+" goto  "+ lbody+"\n"+"goto  "+lexit+ "\n"+lbody+": "+$9->code+"\n"+$7->code+"\ngoto   "+lentry+"\n"+lexit+":\n"; 
+	$$->datatype ="";
+	//cout<<"For: FOR LeftParen Exp SemiCol Exp SemiCol Exp RightParen LeftBrace StmtList RightBrace"<<endl;
+}
+;
+
+
+IfStmt: IF LeftParen Exp RightParen BlockStmt %prec IFX
+{
+	vector<node*> v;
+	v.push_back($3);  
+	v.push_back($5); 
+	$$ = mknode(v,"IfStmt");
+	string lbody = getNewLbl();
+	string lexit = getNewLbl();
+
+	$$->code = "if "+$3->code+ "goto "+ lbody+"\n"+"goto  "+lexit+"\n"+lbody+":"+$5->code+"\n"+lexit+":\n";	//code for ifstmt
+	$$->datatype = ""; 
+	//cout<<"IfStmt: IF LeftParen Exp RightParen LeftBrace StmtList RightBrace %prec IFX"<<endl;
+}
+| IF LeftParen Exp RightParen BlockStmt ELSE BlockStmt
+{
+	vector<node*> v; 
+	v.push_back($3); 
+	v.push_back($5); 
+	v.push_back($7);
+	$$ = mknode(v,"IfStmt");
+	string ltrue= getNewLbl();
+	string lfalse = getNewLbl();
+	string lexit = getNewLbl();
+	$$->code ="if "+$3->code+" goto "+ltrue+"\n"+lfalse+":"+$7->code+"\ngoto "+lexit+"\n"+ltrue+":"+$5->code+"\n"+lexit+":\n";
+	$$->datatype ="";
+	//cout<<"IfStmt-> IF LeftParen Exp RightParen LeftBrace StmtList RightBrace ELSE LeftBrace StmtList RightBrace "<<endl;
+}
+;
+Exp: Id  
+{
+	vector<node*> v; 
+	v.push_back($1);  
+	$$ = mknode(v,"Exp");
+	int idscope = findIdScope($1->code);
+	if(idscope == -1)
+	{
+		semanticError = true;
+		cout << "Undeclared variable " << $1->code <<" at line number " << lineNum<< endl;	
+	}
+	else
+	{
+		$$->datatype = symTab[idscope][$1->code];
+		$$->code = $1->code;
+		$$->datatype = $1->code;
+	} 
+	//cout<<"Exp->Id"<<endl;
+}
+|LeftParen Exp RightParen 
+{
+	vector<node*> v;  
+	v.push_back($2);
+	$$ = mknode(v,"Exp");
+	$$->datatype = $2->datatype;
+	$$->code = $2->code;
+	//cout<<"Exp->LeftParen Exp RightParen "<<endl;
+}
+| '-' %prec UMINUS Integer
+{
+	vector<node*> v; 
+	v.push_back($2);
+	$$ = mknode(v,"Exp");
+	$$->code ="- " + $2->code;
+	$$->datatype=$2->datatype;
+	//cout<<"Exp->'-' %prec UMINUS Exp"<<endl;
+}
+| Integer Opr Exp  
+{
+	vector<node*> v; 
+	v.push_back($1);
+	v.push_back($2); 
+	v.push_back($3);
+	$$ = mknode(v,"Exp");
+	if($1->datatype != $3->datatype)
+		{
+			semanticError = true;
+			cout<<"Mismatching data types of operands at line number "<<lineNum<<endl;
+		}
+		else
+		{
+			$$->code =$2->code+" "+$1->code+" "+$3->code;
+			$$->datatype = $1->datatype;
+		}
+	//cout<<"Exp->Integer Opr Exp  "<<endl;
+}
+| Id %prec BINOP Opr Exp  
+{
+	vector<node*> v; 
+	v.push_back($1);
+	v.push_back($2); 
+	v.push_back($3);
+	$$ = mknode(v,"Exp");
+	int idscope = findIdScope($1->code);
+		if(idscope == -1)
+		{
+			semanticError = true;
+			cout << "Undeclared variable "<< $1->code <<" at line number "<<lineNum<<endl;	
+		}
+		/*else if(symTab[idscope][$1->code] != $3->datatype)
+		{
+			semanticError = true;
+			cout<<"Mismatching data types of operands at line number "<<lineNum<<endl;
+		}*/
+		else
+		{
+			$$->datatype = $1->datatype;
+			$$->code =$2->code+" "+$1->code+" "+$3->code;
+		}
+	//cout<<"Exp->Id Opr Exp  "<<endl;
+}
+| Func_Call  
+{
+	vector<node*> v; 
+	$$ = mknode(v,"Exp");
+	$$->code= $1->code;
+	$$->datatype = $1 ->datatype;
+	//cout<<"Exp->FUNC_CALL"<<endl;
+}
+| InOut 
+{ 
+	vector<node*> v; 
+	v.push_back($1);
+	$$ = mknode(v,"Exp");
+	$$->code = $1->code;
+	//cout<<"Exp->InOut"<<endl;
+}
+| TRUEV 
+{
+	vector<node*> v; 
+	$$ = mknode(v,"Exp");
+	$$->datatype = "bool";
+	$$->code = "true";
+	//cout<<"Exp->TRUEV"<<endl;
+}
+| FALSEV
+{
+	vector<node*> v;
+	$$ = mknode(v,"Exp");
+	$$->code = "false";
+	$$->datatype = "bool";
+	//cout<<"Exp->FALSEV"<<endl;
+}
+| Integer
+{
+	vector<node*> v; 
+	v.push_back($1); 
+	$$ = mknode(v,"Exp");
+	$$->datatype = $1->datatype;
+	$$->code = $1->code;
+	//cout<<"Exp->Integer"<<endl;
+}
+|Strng 
+{
+	vector<node*> v;
+	v.push_back($1);
+	$$ = mknode(v,"Exp");
+	$$->datatype = $1->datatype;
+	$$->code = $1->code;
+	//cout<<"Exp->Strng"<<endl;
+}
+;
+Func_Call: CALL Id LeftParen RightParen  //Shift/Reduce Conflict with Expr: Id might arise 
+	{
+		vector<node*> v;
+		v.push_back($2);
+		$$ = mknode(v,"Func_Call");
+		int fscope=findIdScope($2->code);
+		if(fscope == -1)
+		{
+			cout<<"Reference to Undefined function"<<$2->code<<"at line number "<<lineNum<<endl;
+		}
+		else
+		{
+			$$->datatype = symTab[fscope][$2->code];
+			$$->code="call "+$2->code;
+		}
+	}
+
+Opr:  '=' 
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "=";
+	//cout<<"Opr->'='"<<endl;
+}
+| '|'    
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "|";
+	cout<<"Opr->'|'"<<endl;
+}
+| '&'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "&";
+	//cout<<"Opr->'&'"<<endl;
+}
+| EQ 
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "==";
+	//cout<<"Opr->EQ"<<endl;
+}
+|NE    
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "!=";
+	//cout<<"Opr->NE"<<endl;
+}
+| '>'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = ">";
+	//cout<<"Opr->'>'"<<endl;
+}
+| GE 
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = ">=";
+	//cout<<"Opr->GE"<<endl;
+}
+| '<'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "<";
+	//cout<<"Opr->'<'"<<endl;
+}
+| LE 
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "<=";
+	//cout<<"Opr->LE"<<endl;
+}
+| '+'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "+";
+	//cout<<"Opr->'+'"<<endl;
+}
+| '-'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "-";
+	//cout<<"Opr->'-"<<endl;
+}
+| '*'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "*";
+	//cout<<"Opr->'*'"<<endl;
+}
+| '/'	
+{
+	vector<node*> v;
+	$$ = mknode(v,"Opr");
+	$$->code = "/";
+	//cout<<"Opr->'/'"<<endl;
+}
+;
+InOut: PRINT_VAR Id 
+{
+	vector<node*> v;
+	v.push_back($2); 
+	$$ = mknode(v,"InOut");
+	int idscope = findIdScope($2->code);
+	if(idscope == -1){
+		semanticError = true;
+		cout<<"Undeclared identifier at line number "<<lineNum<<endl;
+	}
+	else
+	{
+		$$->datatype = "";
+		$$->code ="print_"+symTab[idscope][$2->code]+" "+$2->code+"\n";
+	}
+	//cout<<"InOut: PRINT_VAR Id "<<endl;
+}
+| PRINT_INT Integer  
+{
+	vector<node*> v; 
+	v.push_back($2); 
+	$$ = mknode(v,"InOut");
+	$$->datatype = "";
+	$$->code ="print_int "+$2->code+"\n";
+	//cout<<"Inout-> PRINT_INT INT_CONST "<<endl;
+}
+| PRINT_STR Strng
+{
+	vector<node*> v; 
+	v.push_back($2); 
+	$$ = mknode(v,"InOut");
+	$$->datatype = "";
+	$$->code = "print_str "+$2->code+"\n";
+	//cout<<"Inout-> PRINT_STR STR_LITERAL "<<endl;
+}
+| SCAN OP_IN Id   
+{
+	vector<node*> v;
+	v.push_back($3);
+	$$ = mknode(v,"InOut");
+	
+	int idscope = findIdScope($3->code);
+	if(idscope == -1){
+		semanticError = true;
+		cout<<"Undeclared identifier at line number "<<lineNum<<endl;
+	}
+	else
+	{
+	$$->code = "read "+$3->datatype+" "+$3->code+"\n";
+	$$->datatype = "";
+	}
+	//cout<<"Inout->SCAN OP_IN ID  "<<endl;
+}
+;
+Integer: INT_CONST
+		{
+			vector<node*> v; 
+			$$ = mknode(v,"Integer");
+			$$->code = string(yytext,yyleng);
+			$$->datatype = "int";
+		}
+		;
+
+Strng: 	STR_LITERAL
+		{
+			vector<node*> v; 
+			$$ = mknode(v,"Strng");
+			$$->code = string(yytext,yyleng);
+			$$->datatype = "string";
+		}
+		;
+
+SemiCol : ';' 
+{
+	//cout<<"SemiCol : ';' "<<endl;
+}
+| error '\n' 
+	{
+	syntacticError = true;
+	cout<<"Missing semicolon at lineNumber "<<lineNum<<endl;
+	 yyerrok;
+	  }
+;
+
+LeftBrace:   '{' 
+					{
+					map<string,string>	m;
+					symTab.push_back(m);
+					varscope++;
+					//cout<<"{\nCurrent varscope"<<varscope<<endl;
+					}
+			| error '}' 
+				{
+					syntacticError = true;
+	  				cout<<"Missing '{' at line number "<<lineNum<<endl;
+	   				yyerrok;
+	    		}
+
+			;
+RightBrace:		'}'
+				{
+					symTab.pop_back();
+					varscope--;
+					//cout<<" varscope decremented to "<<varscope<<endl;
+					//cout<<"RightBrace->\"}\""<<endl;
+				}
+				| error ';'
+ 					{
+ 						syntacticError = true; 
+ 						cout<<"Missing '}' at line number "<<lineNum<<endl;
+ 	 					yyerrok; 
+ 	 				}
+;
+LeftParen: '('	
+{
+	//cout<<"LeftParen: '('"<<endl;
+}
+| error ')' 
+		{ 
+		syntacticError = true;
+		cout<<"Missing '(' at line number "<<lineNum<<endl;
+		 yyerrok; 
+		}
+;
+
+
+RightParen: ')'	
+{
+	//cout<<"RightParen: ')'	"<<endl;
+}
+| error '\n'
+	 { 
+	 syntacticError = true;
+	 cout<<"Missing ')' at line number "<<lineNum<<endl; 
+	 yyerrok;
+	 }
+;
+%%
+
+struct node* mknode(vector<node*> v,string attr){
+	struct node* n = new node(v,attr);
+	return n;
+}
+void treeprint(int tab){
+	for(int i=0;i<tab;i++) cout<<"\t";
+}
+void preorder(struct node* root,int cnt){
+	treeprint(cnt);
+	if(root){
+		cout<<root->NonTerminalName<<endl;
+		std::vector<struct node*>::iterator i=root->child.begin();
+		while(i!=root->child.end()){
+			preorder(*i,cnt+1);
+			++i;
+		}
+	}else{
+	cout<<"NULL";
+	}	
+}
+void printSymTab(){
+		//cout<<"Symboltablesize"<<symTab.size()<<endl;
+	for(int i=0;i<symTab.size();i++){
+		cout<<"Scope: "<<i<<endl;
+		for(auto j = symTab[i].begin();j!=symTab[i].end();j++){
+			cout<<j->first<<" "<<j->second<<endl;
+		}
+	}
+}
+string getNewReg(){
+	stringstream R;
+	++reg_count; //Assume infinite registers are available for three address code
+	R<<reg_count; 
+	return string("r"+R.str());
+}
+string getNewLbl(){
+	stringstream lb;
+	lb<<++label_count;
+	return string("Lbl"+lb.str());
+	}
+int main()
+{
+	map<string,string> temp;
+	symTab.push_back(temp);
+	yyparse();
+	//preorder(root,0);
+	//cout<<root->code<<endl;
+	if(!syntacticError && !semanticError){
+	//cout<<"Parsing successful"<<endl;
+	cout<<root->code<<endl;
+	}
+	//printSymTab();
+	return 0;
+}
+
+
+
+
+
